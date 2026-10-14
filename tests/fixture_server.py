@@ -6,6 +6,12 @@ The fixture serves the OAuth token endpoint and the two data endpoints:
 * ``GET /api/meteringpoint``
 * ``GET /api/metering-data``
 
+The token endpoint copies the real login server:
+
+* It rotates the refresh token at each renewal and revokes the old token.
+* The refresh token has a short idle life (``refresh_expires_in``).
+* An idle token is dead. Only a new use makes the life start again.
+
 Tests point ``const.TOKEN_URL`` and ``const.API_BASE`` at the returned URL.
 """
 
@@ -20,6 +26,7 @@ from aiohttp.test_utils import TestServer
 USERNAME = "owner@example.com"
 PASSWORD = "secret"
 REFRESH_TOKEN = "refresh-1"
+REFRESH_IDLE = 1800.0
 METERING_POINTS = [{"meteringPointCode": "CH0001", "description": "Home"}]
 RESOLUTIONS = {"PT15M", "P1D", "P1M", "P1Y"}
 
@@ -43,6 +50,13 @@ class FixtureService:
         self._server: TestServer | None = None
         self.base = ""
         self.issued = 0
+        # The newest refresh token, the number of tokens, and the end of its
+        # idle life on the monotonic clock.
+        self.refresh_token = REFRESH_TOKEN
+        self.refresh_issued = 1
+        self.refresh_idle = REFRESH_IDLE
+        self.refresh_deadline = time.monotonic() + REFRESH_IDLE
+        self.rotate_refresh = True
         # Token -> expiry on the monotonic clock. An access token can expire,
         # so the tests can model the real token life.
         self.live: dict[str, float] = {}
@@ -84,20 +98,38 @@ class FixtureService:
                 return web.json_response({"error": "invalid_client"}, status=401)
             if form.get("username") != USERNAME or form.get("password") != PASSWORD:
                 return web.json_response({"error": "invalid_grant"}, status=400)
-            return self._tokens()
+            # A new login starts a new session, so the idle life starts again.
+            return self._tokens(self.refresh_token)
         if grant == "refresh_token":
-            if self.reject_refresh or form.get("refresh_token") != REFRESH_TOKEN:
+            idle = time.monotonic() >= self.refresh_deadline
+            if (
+                self.reject_refresh
+                or form.get("refresh_token") != self.refresh_token
+                or idle
+            ):
                 return web.json_response({"error": "invalid_grant"}, status=400)
-            return self._tokens()
+            return self._tokens(self._rotate())
         return web.json_response({"error": "unsupported_grant_type"}, status=400)
 
-    def _tokens(self) -> web.Response:
+    def expire_refresh(self) -> None:
+        """Make the current refresh token older than its idle life."""
+        self.refresh_deadline = 0.0
+
+    def _rotate(self) -> str:
+        """Return a new refresh token. The old token has no more value."""
+        if self.rotate_refresh:
+            self.refresh_issued += 1
+            self.refresh_token = f"refresh-{self.refresh_issued}"
+        return self.refresh_token
+
+    def _tokens(self, refresh_token: str) -> web.Response:
+        self.refresh_deadline = time.monotonic() + self.refresh_idle
         return web.json_response(
             {
                 "access_token": self._issue(),
                 "expires_in": self.access_ttl,
-                "refresh_token": REFRESH_TOKEN,
-                "refresh_expires_in": 1800,
+                "refresh_token": refresh_token,
+                "refresh_expires_in": self.refresh_idle,
             }
         )
 

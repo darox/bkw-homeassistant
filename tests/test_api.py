@@ -205,6 +205,97 @@ class ApiContractTest(unittest.IsolatedAsyncioTestCase):
             with self.assertRaises(auth.BkwAuthTransient):
                 await api.fetch_metering_points(self.session, self.auth)
 
+    async def test_a_rotated_refresh_token_is_reported(self) -> None:
+        seen: list[str] = []
+        stored = auth.BkwSession(
+            self.session,
+            fixture_server.USERNAME,
+            refresh_token=fixture_server.REFRESH_TOKEN,
+            on_refresh_token=seen.append,
+        )
+        await api.fetch_metering_points(self.session, stored)
+        self.assertEqual(seen, ["refresh-2"])
+        self.assertEqual(stored.refresh_token, "refresh-2")
+
+    async def test_an_unchanged_refresh_token_is_not_reported(self) -> None:
+        self.service.rotate_refresh = False
+        seen: list[str] = []
+        stored = auth.BkwSession(
+            self.session,
+            fixture_server.USERNAME,
+            refresh_token=fixture_server.REFRESH_TOKEN,
+            on_refresh_token=seen.append,
+        )
+        await api.fetch_metering_points(self.session, stored)
+        self.assertEqual(seen, [])
+
+    async def test_the_old_refresh_token_dies_after_a_rotation(self) -> None:
+        stored = auth.BkwSession(
+            self.session,
+            fixture_server.USERNAME,
+            refresh_token=fixture_server.REFRESH_TOKEN,
+        )
+        await api.fetch_metering_points(self.session, stored)
+        # A new start with the token of the config entry. The server rotated
+        # the token, so the old one is dead.
+        restart = auth.BkwSession(
+            self.session,
+            fixture_server.USERNAME,
+            refresh_token=fixture_server.REFRESH_TOKEN,
+        )
+        with self.assertRaises(auth.BkwAuthRejected):
+            await api.fetch_metering_points(self.session, restart)
+        # A new start with the newest token works.
+        newest = auth.BkwSession(
+            self.session,
+            fixture_server.USERNAME,
+            refresh_token=stored.refresh_token,
+        )
+        self.assertEqual(
+            await api.fetch_metering_points(self.session, newest), ["CH0001"]
+        )
+
+    async def test_an_idle_refresh_token_dies(self) -> None:
+        stored = auth.BkwSession(
+            self.session,
+            fixture_server.USERNAME,
+            refresh_token=fixture_server.REFRESH_TOKEN,
+        )
+        await api.fetch_metering_points(self.session, stored)
+        self.service.expire_refresh()
+        restart = auth.BkwSession(
+            self.session,
+            fixture_server.USERNAME,
+            refresh_token=stored.refresh_token,
+        )
+        with self.assertRaises(auth.BkwAuthRejected):
+            await api.fetch_metering_points(self.session, restart)
+
+    async def test_a_forced_call_renews_the_login(self) -> None:
+        stored = auth.BkwSession(
+            self.session,
+            fixture_server.USERNAME,
+            refresh_token=fixture_server.REFRESH_TOKEN,
+        )
+        first = await stored.token()
+        self.assertEqual(await stored.token(), first)
+        self.assertEqual(self.service.issued, 1)
+        self.assertNotEqual(await stored.token(force=True), first)
+        self.assertEqual(self.service.issued, 2)
+
+    async def test_the_newest_refresh_token_is_kept_after_a_renewal(self) -> None:
+        stored = auth.BkwSession(
+            self.session,
+            fixture_server.USERNAME,
+            refresh_token=fixture_server.REFRESH_TOKEN,
+        )
+        self.service.access_ttl = 1.0
+        await stored.token()
+        first = stored.refresh_token
+        await stored.token()
+        self.assertNotEqual(stored.refresh_token, first)
+        self.assertEqual(stored.refresh_token, self.service.refresh_token)
+
 
 if __name__ == "__main__":
     unittest.main()

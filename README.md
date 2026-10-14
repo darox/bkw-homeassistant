@@ -27,6 +27,12 @@ OAuth refresh token in the config entry file. The file
 `.storage/core.config_entries` contains this token. Protect that file in the
 same way as `secrets.yaml`.
 
+The BKW login server gives the refresh token a short life and gives an old
+token no more value. The integration renews the login in the background. Thus
+the sensor keeps its data and a restart of Home Assistant does not ask for the
+password again. If Home Assistant stays off longer than the life of the token,
+the integration asks for the password one time.
+
 ## Change the password
 
 When you change the password on the BKW portal, Home Assistant shows a repair

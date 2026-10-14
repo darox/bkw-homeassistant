@@ -10,7 +10,10 @@ from homeassistant.config_entries import SOURCE_REAUTH, SOURCE_USER
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
 from homeassistant.util import dt as dt_util
-from pytest_homeassistant_custom_component.common import MockConfigEntry
+from pytest_homeassistant_custom_component.common import (
+    MockConfigEntry,
+    async_fire_time_changed,
+)
 
 from custom_components.bkw import const
 from custom_components.bkw.const import DOMAIN
@@ -205,13 +208,68 @@ async def test_reauth_flow_stores_a_new_refresh_token(
         result["flow_id"], {"password": PASSWORD}
     )
     assert result["type"] == "abort"
-    assert entry.data["refresh_token"] == REFRESH
+    assert entry.data["refresh_token"] != "dead"
     assert "password" not in entry.data
     # The flow reloads the entry. Let the reload finish and unload the entry,
     # so no polling timer stays behind at the end of the test.
     await hass.async_block_till_done()
     assert await hass.config_entries.async_unload(entry.entry_id)
     await hass.async_block_till_done()
+
+
+async def test_the_entry_keeps_the_newest_refresh_token(
+    hass: HomeAssistant, api
+) -> None:
+    entry = _entry()
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    # The login server revokes the refresh token of a renewal. The entry must
+    # keep the new one, or the next start asks for the password again.
+    assert entry.data["refresh_token"] == "refresh-2"
+
+    # A restart of Home Assistant must not ask for the password.
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    await hass.async_block_till_done()
+    assert SOURCE_REAUTH not in _flow_sources(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    assert SOURCE_REAUTH not in _flow_sources(hass)
+    states = list(hass.states.async_all("sensor"))
+    assert [state.state for state in states] == ["2.5"]
+
+
+async def test_the_login_is_renewed_before_the_refresh_token_dies(
+    hass: HomeAssistant, api
+) -> None:
+    entry = _entry()
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    first = entry.data["refresh_token"]
+
+    # The data poll is every 6 hours and the refresh token lives 30 minutes.
+    # Only the renewal keeps the login alive between two polls.
+    async_fire_time_changed(hass, dt_util.utcnow() + timedelta(minutes=16))
+    await hass.async_block_till_done()
+
+    assert entry.data["refresh_token"] != first
+    assert SOURCE_REAUTH not in _flow_sources(hass)
+
+
+async def test_the_renewal_asks_for_the_password_when_the_login_dies(
+    hass: HomeAssistant, api
+) -> None:
+    entry = _entry()
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    api.expire_refresh()
+
+    async_fire_time_changed(hass, dt_util.utcnow() + timedelta(minutes=16))
+    await hass.async_block_till_done()
+
+    assert SOURCE_REAUTH in _flow_sources(hass)
 
 
 async def test_reconfigure_flow_changes_the_metering_point(
