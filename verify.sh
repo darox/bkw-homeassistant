@@ -21,6 +21,10 @@ if missing:
     raise SystemExit(f"manifest.json is missing: {sorted(missing)}")
 if manifest["domain"] != root.name:
     raise SystemExit("manifest domain does not match the directory name")
+# Hassfest requires the keys in this order: domain, name, then alphabetical.
+order = list(manifest)
+if order[:2] != ["domain", "name"] or order[2:] != sorted(order[2:]):
+    raise SystemExit(f"manifest.json keys are not sorted as Hassfest requires: {order}")
 print("static checks ok")
 PYCHECK
 "$PY" -m unittest tests.test_api -v
