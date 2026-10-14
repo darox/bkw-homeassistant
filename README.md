@@ -53,17 +53,29 @@ keeps a new refresh token.
 
 ## 15 minute data
 
-You can add a second sensor for the energy of the last 15 minutes.
+You can add the energy of the last complete day to the Energy dashboard.
 
 1. Go to **Settings -> Devices & services**.
 2. Open the BKW Energy entry.
 3. Select **Reconfigure**.
-4. Enable **Add a sensor for the energy of the last 15 minutes**.
+4. Enable **Import the last complete day into the Energy dashboard and add a
+   15 minute sensor**.
 5. Select **Submit**.
+6. Go to the Energy dashboard and add the new energy source of the account.
 
-The sensor gives the energy of the newest 15 minute interval. BKW sends
-this data with a delay. Thus the sensor can show an interval of the last
-complete day.
+BKW sends the meter data of a day about one day late. The integration reads
+the 15 minute records again at each poll and writes them into the statistics
+of Home Assistant. Thus the Energy dashboard shows that day as if it were
+yesterday. A poll reads a window of some days again, so a correction of the
+meter data and a downtime of Home Assistant do not lose data.
+
+Home Assistant keeps the long-term statistics of an external source as hour
+values. Thus the resolution in the Energy dashboard is one hour, not 15
+minutes.
+
+The option also adds a sensor with the energy of the newest 15 minute
+interval. Use that sensor for an automation. Do not add it to the Energy
+dashboard: its values arrive with a delay of about one day.
 
 ## License
 

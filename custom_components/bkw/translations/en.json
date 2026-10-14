@@ -22,7 +22,7 @@
         "description": "Select the metering point code of this account.",
         "data": {
           "metering_point": "Metering point code",
-          "quarter_hour": "Add a sensor for the energy of the last 15 minutes"
+          "quarter_hour": "Import the last complete day into the Energy dashboard and add a 15 minute sensor"
         }
       }
     },
