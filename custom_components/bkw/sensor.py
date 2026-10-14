@@ -75,13 +75,11 @@ class BkwConsumptionSensor(SensorEntity):
         )
 
     async def async_update(self) -> None:
-        """Read the consumption of today and set the state."""
-        now = dt_util.now()
-        start = now.replace(hour=0, minute=0, second=0, microsecond=0)
-        if now <= start:
-            return
+        """Read the energy of the last complete day and set the state."""
+        today = dt_util.start_of_local_day()
+        start = dt_util.start_of_local_day(today - timedelta(days=1))
         records = await api.fetch_consumption(
-            self._session, self._auth, start, now, self._code, DEFAULT_RESOLUTION
+            self._session, self._auth, start, today, self._code, DEFAULT_RESOLUTION
         )
         self._attr_native_value = api.latest_value(records)
         self._attr_last_reset = start

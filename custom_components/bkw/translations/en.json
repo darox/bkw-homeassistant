@@ -24,7 +24,7 @@
   "entity": {
     "sensor": {
       "consumption": {
-        "name": "Consumption today"
+        "name": "Consumption yesterday"
       }
     }
   }

@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+from datetime import timedelta
 from unittest.mock import AsyncMock, patch
 
 import pytest
 from homeassistant.config_entries import SOURCE_USER
 from homeassistant.core import HomeAssistant
+from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.bkw import const
@@ -117,3 +119,24 @@ async def test_entry_against_real_fixture_api(
         assert states[0].state == "2.5"
     finally:
         await service.stop()
+
+
+async def test_sensor_reads_the_last_complete_day(hass: HomeAssistant) -> None:
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title=fixture_server.USERNAME,
+        unique_id=fixture_server.USERNAME,
+        data=DATA,
+    )
+    entry.add_to_hass(hass)
+    mock = AsyncMock(return_value=[("2026-10-13T00:00:00.000Z", 2.5)])
+    with patch(f"{API}.fetch_consumption", mock):
+        assert await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+    _session, _auth, start, stop, code, _resolution = mock.await_args.args
+    assert stop == dt_util.start_of_local_day()
+    assert start == dt_util.start_of_local_day(stop - timedelta(days=1))
+    assert code == "CH0001"
+    states = list(hass.states.async_all("sensor"))
+    assert len(states) == 1
+    assert states[0].state == "2.5"

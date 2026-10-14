@@ -9,6 +9,6 @@
   "integration_type": "hub",
   "iot_class": "cloud_polling",
   "requirements": [],
-  "version": "0.2.3",
+  "version": "0.2.4",
   "issue_tracker": "https://github.com/darox/bkw-homeassistant/issues"
 }
