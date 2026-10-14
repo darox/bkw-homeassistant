@@ -296,6 +296,50 @@ class ApiContractTest(unittest.IsolatedAsyncioTestCase):
         self.assertNotEqual(stored.refresh_token, first)
         self.assertEqual(stored.refresh_token, self.service.refresh_token)
 
+    async def test_the_login_asks_for_an_offline_token(self) -> None:
+        await self.auth.token()
+        self.assertEqual(self.service.password_scope, const.SCOPE)
+        # An offline token has no stated end of life.
+        self.assertIsNone(self.auth.refresh_expires_at)
+
+    async def test_the_offline_login_keeps_its_long_life_at_a_renewal(self) -> None:
+        await self.auth.token()
+        await self.auth.token(force=True)
+        self.assertEqual(self.auth.refresh_token, "refresh-2")
+        self.assertIsNone(self.auth.refresh_expires_at)
+
+    async def test_the_login_uses_the_plain_scope_without_the_role(self) -> None:
+        self.service.allow_offline = False
+        await self.auth.token()
+        # The server refused the offline scope, and the code asked again with
+        # the plain scope.
+        self.assertEqual(self.service.password_grants, 2)
+        self.assertEqual(self.service.password_scope, const.SCOPE_PLAIN)
+        self.assertIsNotNone(self.auth.refresh_expires_at)
+
+    async def test_a_wrong_password_does_not_ask_again_with_another_scope(
+        self,
+    ) -> None:
+        wrong = auth.BkwSession(self.session, fixture_server.USERNAME, "wrong")
+        with self.assertRaises(auth.BkwAuthRejected):
+            await wrong.token()
+        self.assertEqual(self.service.password_grants, 1)
+
+    async def test_an_offline_login_survives_a_long_downtime(self) -> None:
+        await self.auth.token()
+        first = self.auth.refresh_token
+        # A downtime of the client. The idle life of the offline token is
+        # much longer than the idle life of a plain token.
+        self.service.downtime(timedelta(days=1))
+        restart = auth.BkwSession(
+            self.session,
+            fixture_server.USERNAME,
+            refresh_token=first,
+        )
+        self.assertEqual(
+            await api.fetch_metering_points(self.session, restart), ["CH0001"]
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

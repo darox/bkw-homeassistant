@@ -111,12 +111,14 @@ async def _async_login_with_the_password(entry: ConfigEntry, auth: BkwSession) -
 
 
 class _LoginRenewal:
-    """Renew the BKW login before the refresh token dies.
+    """Renew the BKW login and hold the login session open.
 
-    The login server rotates the refresh token and gives it a short life (the
-    response field `refresh_expires_in`, about 30 minutes). The sensor reads
-    the meter data every 6 hours. Without a renewal the login dies between two
-    polls, and Home Assistant asks for the password again at the next start.
+    The login server rotates the refresh token at each renewal. An offline
+    login token has no short life. A plain login token has one (the response
+    field `refresh_expires_in`, about 30 minutes), and the sensor reads the
+    meter data only every 6 hours. Without a renewal a plain login dies
+    between two polls, and Home Assistant asks for the password again at the
+    next start.
     """
 
     def __init__(
@@ -194,8 +196,8 @@ def _renewal_delay(auth: BkwSession) -> timedelta:
     """Return the delay before the next renewal of the login."""
     expires = auth.refresh_expires_at
     if expires is None:
-        # The login server did not state a life. Renew the login two times
-        # each day.
+        # The login server did not state a life. That is an offline login.
+        # Renew the login two times each day, to hold the session open.
         return LOGIN_RENEWAL_MAXIMUM
     remaining = (expires - dt_util.utcnow()) / LOGIN_RENEWAL_SHARE
     return min(max(remaining, LOGIN_RENEWAL_MINIMUM), LOGIN_RENEWAL_MAXIMUM)

@@ -272,6 +272,60 @@ async def test_the_renewal_asks_for_the_password_when_the_login_dies(
     assert SOURCE_REAUTH in _flow_sources(hass)
 
 
+async def test_a_long_downtime_keeps_the_login(hass: HomeAssistant, api) -> None:
+    """An offline login lives across a restart after a long downtime."""
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": SOURCE_USER}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"username": USERNAME, "password": PASSWORD}
+    )
+    assert result["type"] == "create_entry"
+    entry = result["result"]
+    await hass.async_block_till_done()
+
+    # One day without Home Assistant. The idle life of the offline token is
+    # longer than one day, so the login survives the downtime.
+    api.downtime(timedelta(days=1))
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    await hass.async_block_till_done()
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    assert SOURCE_REAUTH not in _flow_sources(hass)
+    assert [state.state for state in hass.states.async_all("sensor")] == ["2.5"]
+
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    await hass.async_block_till_done()
+
+
+async def test_a_long_downtime_asks_for_the_password_without_offline_login(
+    hass: HomeAssistant, api
+) -> None:
+    """The contrast. An account without the role gets a short lived token."""
+    api.allow_offline = False
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": SOURCE_USER}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"username": USERNAME, "password": PASSWORD}
+    )
+    assert result["type"] == "create_entry"
+    entry = result["result"]
+    await hass.async_block_till_done()
+
+    api.downtime(timedelta(days=1))
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    await hass.async_block_till_done()
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    assert SOURCE_REAUTH in _flow_sources(hass)
+
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    await hass.async_block_till_done()
+
+
 async def test_reconfigure_flow_changes_the_metering_point(
     hass: HomeAssistant, api
 ) -> None:

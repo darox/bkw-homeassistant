@@ -21,7 +21,12 @@ TOKEN_URL = (
     "/protocol/openid-connect/token"
 )
 CLIENT_ID = "mybkw-webapp"
-SCOPE = "openid"
+# The login server accepts the scope `offline_access`. An offline refresh
+# token has no short life, so a restart and a long downtime of Home Assistant
+# do not ask for the password again. An account without the `offline_access`
+# role gets the plain scope instead.
+SCOPE = "openid offline_access"
+SCOPE_PLAIN = "openid"
 
 API_BASE = "https://api-energy-monitoring.bkw.ch"
 METERING_POINTS_PATH = "/api/meteringpoint"
@@ -40,11 +45,12 @@ QUARTER_HOUR = timedelta(minutes=15)
 # same values as an hourly poll, with less load on the server.
 SCAN_INTERVAL = timedelta(hours=6)
 
-# The login server rotates the refresh token and gives it a short life. The
-# response field `refresh_expires_in` holds that life, about 30 minutes. The
-# data poll is every 6 hours, so the login must be renewed between the polls.
-# Without the renewal, the login dies and Home Assistant asks for the password
-# again at the next start.
+# The login server rotates the refresh token at each renewal. The response
+# field `refresh_expires_in` holds the life of the token: about 30 minutes
+# for a plain login, and 0 (no stated life) for an offline login. The data
+# poll is every 6 hours, so a plain login must be renewed between the polls.
+# Without the renewal, the login dies and Home Assistant asks for the
+# password again at the next start.
 LOGIN_RENEWAL_SHARE = 2  # renew the login after half of the remaining life
 LOGIN_RENEWAL_MINIMUM = timedelta(minutes=1)
 LOGIN_RENEWAL_MAXIMUM = timedelta(hours=6)
