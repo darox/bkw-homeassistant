@@ -150,8 +150,8 @@ async def fetch_consumption(
     return records
 
 
-def latest_value(records: list[tuple[str, float]]) -> float | None:
-    """Return the value of the newest record, or None when there is no data."""
+def latest_record(records: list[tuple[str, float]]) -> tuple[str, float] | None:
+    """Return the newest (timestamp, kWh) record, or None without data."""
     if not records:
         return None
 
@@ -161,4 +161,10 @@ def latest_value(records: list[tuple[str, float]]) -> float | None:
         except ValueError:
             return (datetime.min.replace(tzinfo=timezone.utc), record[0])
 
-    return max(records, key=sort_key)[1]
+    return max(records, key=sort_key)
+
+
+def latest_value(records: list[tuple[str, float]]) -> float | None:
+    """Return the value of the newest record, or None when there is no data."""
+    record = latest_record(records)
+    return None if record is None else record[1]
