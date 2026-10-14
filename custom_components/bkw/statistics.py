@@ -13,7 +13,7 @@ them next to the sensors.
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING
 
 from homeassistant.components.recorder import get_instance
@@ -24,7 +24,6 @@ from homeassistant.components.recorder.models import (
 )
 from homeassistant.components.recorder.statistics import (
     async_add_external_statistics,
-    get_last_statistics,
     statistics_during_period,
 )
 from homeassistant.const import UnitOfEnergy
@@ -81,8 +80,10 @@ async def async_import(
         return
     stat_id = statistic_id(code)
     instance = get_instance(hass)
+    first = next(iter(hours))
+    last = next(reversed(hours))
     try:
-        total = await _async_last_sum(hass, instance, stat_id, next(iter(hours)))
+        total = await _async_last_sum(hass, instance, stat_id, first, last)
         statistics: list[StatisticData] = []
         for start, value in hours.items():
             total += value
@@ -106,34 +107,47 @@ async def async_import(
 
 
 async def _async_last_sum(
-    hass: HomeAssistant, instance: Recorder, stat_id: str, first: datetime
+    hass: HomeAssistant,
+    instance: Recorder,
+    stat_id: str,
+    first: datetime,
+    last: datetime,
 ) -> float:
     """Return the stored sum just before the first record.
 
-    The sum of an import must continue the stored sum, or the Energy dashboard
-    counts the data of an older import again. Return 0.0 without a stored sum.
+    The import window can overlap rows that are already stored. Derive the
+    base sum from the earliest overlapping row, so a correction does not
+    recount older data. If no row overlaps, use the newest row before the
+    window. Return 0.0 when the statistic is new.
     """
-    before = first - timedelta(hours=1)
     rows = await instance.async_add_executor_job(
         statistics_during_period,
         hass,
-        before,
-        before + timedelta(seconds=1),
+        first,
+        last + timedelta(hours=1),
+        {stat_id},
+        "hour",
+        None,
+        {"state", "sum"},
+    )
+    for row in rows.get(stat_id, []):
+        state = row.get("state")
+        total = row.get("sum")
+        if state is not None and total is not None:
+            return float(total) - float(state)
+
+    rows = await instance.async_add_executor_job(
+        statistics_during_period,
+        hass,
+        datetime(1970, 1, 1, tzinfo=timezone.utc),
+        first,
         {stat_id},
         "hour",
         None,
         {"sum"},
     )
-    row = rows.get(stat_id)
-    if row and row[0].get("sum") is not None:
-        return float(row[0]["sum"])
-    # The window of this import can be wider than the window of the last
-    # import, for example after a downtime of Home Assistant. Use the newest
-    # stored sum then, but only when it is older than the first record.
-    last = await instance.async_add_executor_job(
-        get_last_statistics, hass, 1, stat_id, True, {"sum"}
-    )
-    row = last.get(stat_id)
-    if row and row[0]["start"] < first.timestamp() and row[0].get("sum") is not None:
-        return float(row[0]["sum"])
+    for row in reversed(rows.get(stat_id, [])):
+        total = row.get("sum")
+        if total is not None:
+            return float(total)
     return 0.0

@@ -10,6 +10,7 @@ The module has no Home Assistant imports, so a plain test can use it.
 from __future__ import annotations
 
 import asyncio
+import math
 from datetime import datetime, timezone
 from typing import Any
 
@@ -144,8 +145,16 @@ async def fetch_consumption(
     for record in data:
         stamp = record.get("t") if isinstance(record, dict) else None
         value = record.get("v") if isinstance(record, dict) else None
-        if not isinstance(stamp, str) or not isinstance(value, (int, float)):
+        if not isinstance(stamp, str):
             raise BkwInvalidResponse("invalid consumption record")
+        try:
+            parse_timestamp(stamp)
+        except (TypeError, ValueError) as err:
+            raise BkwInvalidResponse("invalid consumption timestamp") from err
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise BkwInvalidResponse("invalid consumption value")
+        if not math.isfinite(float(value)):
+            raise BkwInvalidResponse("invalid consumption value")
         records.append((stamp, float(value)))
     return records
 

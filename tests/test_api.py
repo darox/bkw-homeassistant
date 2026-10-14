@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import unittest
 from datetime import datetime, timedelta, timezone
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import aiohttp
 
@@ -172,6 +172,28 @@ class ApiContractTest(unittest.IsolatedAsyncioTestCase):
             await api.fetch_consumption(
                 self.session, self.auth, start, start + timedelta(days=1), "BADJSON"
             )
+
+    async def test_invalid_consumption_records_are_rejected(self) -> None:
+        start = datetime(2026, 10, 14, tzinfo=timezone.utc)
+        bad_records = [
+            {"t": "not a timestamp", "v": 1.0},
+            {"t": "2026-10-14T00:15:00.000Z", "v": True},
+            {"t": "2026-10-14T00:15:00.000Z", "v": float("nan")},
+            {"t": "2026-10-14T00:15:00.000Z", "v": float("inf")},
+            {"t": "2026-10-14T00:15:00.000Z", "v": "1.0"},
+        ]
+        for record in bad_records:
+            with self.subTest(record=record):
+                with patch.object(api, "_request", AsyncMock(return_value=[record])):
+                    with self.assertRaises(api.BkwInvalidResponse):
+                        await api.fetch_consumption(
+                            self.session,
+                            self.auth,
+                            start,
+                            start + timedelta(hours=1),
+                            "CH0001",
+                            "PT15M",
+                        )
 
     async def test_redirect_is_not_followed(self) -> None:
         start = datetime(2026, 10, 14, tzinfo=timezone.utc)
