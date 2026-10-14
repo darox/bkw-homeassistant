@@ -174,6 +174,7 @@ async def test_the_sum_continues_when_the_previous_hour_is_missing(
         ("2026-10-13T02:15:00.000Z", 2.0),
     ]
     await statistics.async_import(hass, "CH0001", "Test", first_import)
+    await hass.async_block_till_done()
     await recorder_mock.async_block_till_done()
     assert await _async_rows(hass) == [
         (datetime(2026, 10, 13, 0, 0, tzinfo=timezone.utc), 1.0, 1.0),
@@ -182,6 +183,7 @@ async def test_the_sum_continues_when_the_previous_hour_is_missing(
 
     second_import = [("2026-10-13T02:15:00.000Z", 2.0)]
     await statistics.async_import(hass, "CH0001", "Test", second_import)
+    await hass.async_block_till_done()
     await recorder_mock.async_block_till_done()
     assert await _async_rows(hass) == [
         (datetime(2026, 10, 13, 0, 0, tzinfo=timezone.utc), 1.0, 1.0),
