@@ -1,8 +1,7 @@
 # BKW Energy
 
 A minimal Home Assistant integration for the BKW energy API. It makes one energy
-sensor for each metering point. The sensor gives the energy since local midnight,
-in kWh.
+sensor for each metering point, in kWh. BKW delays the meter data by about one day.
 
 ## Install
 
