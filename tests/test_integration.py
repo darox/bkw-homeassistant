@@ -8,14 +8,16 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from homeassistant.config_entries import SOURCE_REAUTH, SOURCE_USER
 from homeassistant.core import HomeAssistant
+import voluptuous as vol
 from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers.selector import TextSelector, TextSelectorType
 from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import (
     MockConfigEntry,
     async_fire_time_changed,
 )
 
-from custom_components.bkw import const
+from custom_components.bkw import config_flow, const
 from custom_components.bkw.const import DOMAIN
 from tests import fixture_server
 
@@ -61,6 +63,14 @@ def _flow_sources(hass: HomeAssistant) -> list[str]:
     return [
         flow["context"]["source"] for flow in hass.config_entries.flow.async_progress()
     ]
+
+
+def test_the_initial_config_flow_uses_a_password_selector() -> None:
+    field = config_flow.STEP_USER_SCHEMA.schema[
+        vol.Required(const.CONF_PASSWORD)
+    ]
+    assert isinstance(field, TextSelector)
+    assert field.config["type"] == TextSelectorType.PASSWORD
 
 
 async def test_config_flow_creates_one_entry(hass: HomeAssistant, api) -> None:

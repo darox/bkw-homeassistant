@@ -165,6 +165,30 @@ async def test_a_long_downtime_does_not_lose_the_records(
     await hass.async_block_till_done()
 
 
+async def test_the_sum_continues_when_the_previous_hour_is_missing(
+    hass: HomeAssistant, recorder_mock
+) -> None:
+    """An overlapping row keeps its base sum, also after a missing hour."""
+    first_import = [
+        ("2026-10-13T00:15:00.000Z", 1.0),
+        ("2026-10-13T02:15:00.000Z", 2.0),
+    ]
+    await statistics.async_import(hass, "CH0001", "Test", first_import)
+    await recorder_mock.async_block_till_done()
+    assert await _async_rows(hass) == [
+        (datetime(2026, 10, 13, 0, 0, tzinfo=timezone.utc), 1.0, 1.0),
+        (datetime(2026, 10, 13, 2, 0, tzinfo=timezone.utc), 2.0, 3.0),
+    ]
+
+    second_import = [("2026-10-13T02:15:00.000Z", 2.0)]
+    await statistics.async_import(hass, "CH0001", "Test", second_import)
+    await recorder_mock.async_block_till_done()
+    assert await _async_rows(hass) == [
+        (datetime(2026, 10, 13, 0, 0, tzinfo=timezone.utc), 1.0, 1.0),
+        (datetime(2026, 10, 13, 2, 0, tzinfo=timezone.utc), 2.0, 3.0),
+    ]
+
+
 async def test_a_second_poll_keeps_the_same_statistics(
     hass: HomeAssistant, api, recorder_mock
 ) -> None:
