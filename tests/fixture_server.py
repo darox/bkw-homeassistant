@@ -11,6 +11,7 @@ Tests point ``const.TOKEN_URL`` and ``const.API_BASE`` at the returned URL.
 
 from __future__ import annotations
 
+import time
 from datetime import datetime
 
 from aiohttp import web
@@ -18,6 +19,7 @@ from aiohttp.test_utils import TestServer
 
 USERNAME = "owner@example.com"
 PASSWORD = "secret"
+REFRESH_TOKEN = "refresh-1"
 METERING_POINTS = [{"meteringPointCode": "CH0001", "description": "Home"}]
 RESOLUTIONS = {"PT15M", "P1D", "P1M", "P1Y"}
 
@@ -29,8 +31,14 @@ class FixtureService:
         self._server: TestServer | None = None
         self.base = ""
         self.issued = 0
-        self.live: set[str] = set()
+        # Token -> expiry on the monotonic clock. An access token can expire,
+        # so the tests can model the real token life.
+        self.live: dict[str, float] = {}
+        self.access_ttl = 300.0
         self.reject_next_access = False
+        self.reject_refresh = False
+        self.password_grants = 0
+        self.metering_points = [dict(point) for point in METERING_POINTS]
 
     async def start(self) -> str:
         """Bind the fixture and return its base URL."""
@@ -52,48 +60,47 @@ class FixtureService:
     def _issue(self) -> str:
         self.issued += 1
         token = f"access-{self.issued}"
-        self.live.add(token)
+        self.live[token] = time.monotonic() + self.access_ttl
         return token
 
     async def _token(self, request: web.Request) -> web.Response:
         form = await request.post()
         grant = form.get("grant_type")
         if grant == "password":
+            self.password_grants += 1
             if form.get("client_id") != "mybkw-webapp":
                 return web.json_response({"error": "invalid_client"}, status=401)
             if form.get("username") != USERNAME or form.get("password") != PASSWORD:
                 return web.json_response({"error": "invalid_grant"}, status=400)
-            return web.json_response(
-                {
-                    "access_token": self._issue(),
-                    "expires_in": 300,
-                    "refresh_token": "refresh-1",
-                    "refresh_expires_in": 1800,
-                }
-            )
+            return self._tokens()
         if grant == "refresh_token":
-            if form.get("refresh_token") != "refresh-1":
+            if self.reject_refresh or form.get("refresh_token") != REFRESH_TOKEN:
                 return web.json_response({"error": "invalid_grant"}, status=400)
-            return web.json_response(
-                {
-                    "access_token": self._issue(),
-                    "expires_in": 300,
-                    "refresh_token": "refresh-1",
-                    "refresh_expires_in": 1800,
-                }
-            )
+            return self._tokens()
         return web.json_response({"error": "unsupported_grant_type"}, status=400)
+
+    def _tokens(self) -> web.Response:
+        return web.json_response(
+            {
+                "access_token": self._issue(),
+                "expires_in": self.access_ttl,
+                "refresh_token": REFRESH_TOKEN,
+                "refresh_expires_in": 1800,
+            }
+        )
 
     def _authorized(self, request: web.Request) -> web.Response | None:
         header = request.headers.get("Authorization", "")
         if not header.startswith("Bearer "):
             return web.json_response({"error": "unauthorized"}, status=401)
         token = header[len("Bearer ") :]
-        if token not in self.live:
+        expiry = self.live.get(token)
+        if expiry is None or expiry <= time.monotonic():
+            self.live.pop(token, None)
             return web.json_response({"error": "unauthorized"}, status=401)
         if self.reject_next_access:
             self.reject_next_access = False
-            self.live.discard(token)
+            self.live.pop(token, None)
             return web.json_response({"error": "unauthorized"}, status=401)
         return None
 
@@ -101,7 +108,7 @@ class FixtureService:
         denied = self._authorized(request)
         if denied is not None:
             return denied
-        return web.json_response(METERING_POINTS)
+        return web.json_response(self.metering_points)
 
     async def _metering_data(self, request: web.Request) -> web.Response:
         denied = self._authorized(request)
@@ -121,6 +128,10 @@ class FixtureService:
             return web.json_response({"error": "invalid input"}, status=400)
         if point == "BOOM":
             return web.json_response({"error": "upstream failure"}, status=502)
+        if point == "BADJSON":
+            return web.Response(text="not json", content_type="application/json")
+        if point == "REDIRECT":
+            return web.Response(status=302, headers={"Location": self.base + "/login"})
         if point != "CH0001":
             return web.json_response({"error": "not found"}, status=404)
         return web.json_response(

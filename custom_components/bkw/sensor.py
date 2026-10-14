@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import timedelta
 
 from homeassistant.components.sensor import (
@@ -12,22 +13,15 @@ from homeassistant.components.sensor import (
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import UnitOfEnergy
 from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import ConfigEntryNotReady
-from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.util import dt as dt_util
 
 from . import api
-from .auth import BkwAuthError, BkwSession
-from .const import (
-    CONF_METERING_POINT,
-    CONF_PASSWORD,
-    CONF_USERNAME,
-    DEFAULT_RESOLUTION,
-    DOMAIN,
-    SCAN_INTERVAL,
-)
+from .auth import BkwAuthRejected, BkwError
+from .const import DEFAULT_RESOLUTION, DOMAIN, SCAN_INTERVAL  # noqa: F401
+
+_LOGGER = logging.getLogger(__name__)
 
 
 async def async_setup_entry(
@@ -36,24 +30,12 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Create one sensor for the metering point of this entry."""
-    session = async_get_clientsession(hass)
-    auth = BkwSession(
-        session, entry.data[CONF_USERNAME], entry.data[CONF_PASSWORD]
-    )
-    code = entry.data.get(CONF_METERING_POINT)
-    if not code:
-        try:
-            codes = await api.fetch_metering_points(session, auth)
-        except (api.BkwError, BkwAuthError) as err:
-            raise ConfigEntryNotReady(str(err)) from err
-        if len(codes) != 1:
-            raise ConfigEntryNotReady("the metering point is ambiguous")
-        code = codes[0]
-    async_add_entities([BkwConsumptionSensor(session, auth, entry, code)], True)
+    data = entry.runtime_data
+    async_add_entities([BkwConsumptionSensor(entry, data)], True)
 
 
 class BkwConsumptionSensor(SensorEntity):
-    """Energy that the meter measured since local midnight, in kWh."""
+    """Energy of the last complete local day, in kWh."""
 
     _attr_has_entity_name = True
     _attr_translation_key = "consumption"
@@ -62,11 +44,11 @@ class BkwConsumptionSensor(SensorEntity):
     _attr_native_unit_of_measurement = UnitOfEnergy.KILO_WATT_HOUR
     _attr_should_poll = True
 
-    def __init__(self, session, auth, entry: ConfigEntry, code: str) -> None:
-        self._session = session
-        self._auth = auth
-        self._code = code
-        self._attr_unique_id = f"{entry.entry_id}_{code}"
+    def __init__(self, entry: ConfigEntry, data) -> None:
+        self._entry = entry
+        self._data = data
+        unique = entry.unique_id or entry.entry_id
+        self._attr_unique_id = f"{unique}_{data.code}"
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, entry.entry_id)},
             name=entry.title,
@@ -78,8 +60,31 @@ class BkwConsumptionSensor(SensorEntity):
         """Read the energy of the last complete day and set the state."""
         today = dt_util.start_of_local_day()
         start = dt_util.start_of_local_day(today - timedelta(days=1))
-        records = await api.fetch_consumption(
-            self._session, self._auth, start, today, self._code, DEFAULT_RESOLUTION
-        )
+        try:
+            records = await api.fetch_consumption(
+                self._data.session,
+                self._data.auth,
+                start,
+                today,
+                self._data.code,
+                DEFAULT_RESOLUTION,
+            )
+        except BkwAuthRejected as err:
+            # The stored login is dead. Keep the state unknown and ask the
+            # user for the password again.
+            _LOGGER.warning(
+                "The BKW login of %s is no longer valid: %s", self._entry.title, err
+            )
+            self._attr_native_value = None
+            self._entry.async_start_reauth(self.hass)
+            return
+        except BkwError as err:
+            # A temporary failure must not remove the entity. An unknown state
+            # is better than a missing sensor.
+            _LOGGER.warning(
+                "Cannot read the BKW data of %s: %s", self._entry.title, err
+            )
+            self._attr_native_value = None
+            return
         self._attr_native_value = api.latest_value(records)
         self._attr_last_reset = start

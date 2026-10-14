@@ -1,0 +1,47 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "BKW Energy",
+        "description": "Geben Sie die Zugangsdaten Ihres BKW-Kontos ein.",
+        "data": {
+          "username": "Benutzername",
+          "password": "Passwort",
+          "metering_point": "Messpunkt-Code (optional)"
+        }
+      },
+      "reauth_confirm": {
+        "title": "BKW Energy",
+        "description": "Die Zugangsdaten von {username} sind nicht mehr gültig. Geben Sie das Passwort dieses Kontos erneut ein.",
+        "data": {
+          "password": "Passwort"
+        }
+      },
+      "reconfigure": {
+        "title": "BKW Energy",
+        "description": "Wählen Sie den Messpunkt-Code dieses Kontos.",
+        "data": {
+          "metering_point": "Messpunkt-Code"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Die BKW-API ist nicht erreichbar.",
+      "invalid_auth": "Benutzername oder Passwort ist falsch.",
+      "metering_point_required": "Das Konto hat mehrere Messpunkte. Geben Sie einen Messpunkt-Code ein.",
+      "invalid_metering_point": "Das Konto kennt diesen Messpunkt-Code nicht."
+    },
+    "abort": {
+      "already_configured": "Dieses Konto ist bereits konfiguriert.",
+      "no_metering_point": "Das Konto hat keinen Messpunkt.",
+      "reauth_required": "Die gespeicherten Zugangsdaten sind nicht mehr gültig. Starten Sie zuerst die erneute Anmeldung."
+    }
+  },
+  "entity": {
+    "sensor": {
+      "consumption": {
+        "name": "Verbrauch gestern"
+      }
+    }
+  }
+}

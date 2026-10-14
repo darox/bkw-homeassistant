@@ -2,18 +2,14 @@
 
 from __future__ import annotations
 
-import sys
+import asyncio
 import unittest
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 from unittest.mock import patch
 
 import aiohttp
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-
-from custom_components.bkw import auth, const
-from custom_components.bkw import api
+from custom_components.bkw import api, auth, const
 from tests import fixture_server
 
 
@@ -59,11 +55,79 @@ class ApiContractTest(unittest.IsolatedAsyncioTestCase):
     async def test_empty_result_is_none_not_zero(self) -> None:
         self.assertIsNone(api.latest_value([]))
 
+    async def test_latest_value_compares_real_timestamps(self) -> None:
+        # Text order would pick the second record, but its real time is earlier.
+        records = [
+            ("2026-10-13T23:00:00.000Z", 1.0),
+            ("2026-10-14T00:30:00.000+02:00", 2.0),
+        ]
+        self.assertEqual(api.latest_value(records), 1.0)
+
     async def test_wrong_password_raises_auth_rejected(self) -> None:
         bad = auth.BkwSession(self.session, fixture_server.USERNAME, "wrong")
         with self.assertRaises(auth.BkwAuthRejected) as caught:
             await api.fetch_metering_points(self.session, bad)
         self.assertEqual(caught.exception.code, "invalid_grant")
+
+    async def test_session_from_a_refresh_token_does_not_send_the_password(
+        self,
+    ) -> None:
+        stored = auth.BkwSession(
+            self.session,
+            fixture_server.USERNAME,
+            refresh_token=fixture_server.REFRESH_TOKEN,
+        )
+        self.assertEqual(
+            await api.fetch_metering_points(self.session, stored), ["CH0001"]
+        )
+        self.assertEqual(self.service.password_grants, 0)
+        self.assertEqual(self.service.issued, 1)
+
+    async def test_dead_refresh_token_without_a_password_is_rejected(self) -> None:
+        stored = auth.BkwSession(
+            self.session,
+            fixture_server.USERNAME,
+            refresh_token=fixture_server.REFRESH_TOKEN,
+        )
+        self.service.reject_refresh = True
+        with self.assertRaises(auth.BkwAuthRejected):
+            await api.fetch_metering_points(self.session, stored)
+
+    async def test_dead_refresh_token_falls_back_to_the_password(self) -> None:
+        both = auth.BkwSession(
+            self.session,
+            fixture_server.USERNAME,
+            fixture_server.PASSWORD,
+            fixture_server.REFRESH_TOKEN,
+        )
+        self.service.reject_refresh = True
+        self.assertEqual(
+            await api.fetch_metering_points(self.session, both), ["CH0001"]
+        )
+        self.assertEqual(self.service.password_grants, 1)
+
+    async def test_expired_access_token_is_renewed_with_the_refresh_token(
+        self,
+    ) -> None:
+        stored = auth.BkwSession(
+            self.session,
+            fixture_server.USERNAME,
+            refresh_token=fixture_server.REFRESH_TOKEN,
+        )
+        self.service.access_ttl = 5.0
+        # The 30 second skew refreshes an access token that lives 5 seconds.
+        await api.fetch_metering_points(self.session, stored)
+        await api.fetch_metering_points(self.session, stored)
+        self.assertEqual(self.service.issued, 2)
+        self.assertEqual(self.service.password_grants, 0)
+
+    async def test_concurrent_calls_share_one_grant(self) -> None:
+        fresh = auth.BkwSession(
+            self.session, fixture_server.USERNAME, fixture_server.PASSWORD
+        )
+        tokens = await asyncio.gather(*(fresh.token() for _ in range(3)))
+        self.assertEqual(len(set(tokens)), 1)
+        self.assertEqual(self.service.password_grants, 1)
 
     async def test_rejected_access_token_is_renewed_one_time(self) -> None:
         await api.fetch_metering_points(self.session, self.auth)
@@ -81,6 +145,21 @@ class ApiContractTest(unittest.IsolatedAsyncioTestCase):
             )
         self.assertEqual(caught.exception.status, 502)
 
+    async def test_bad_json_body_is_an_invalid_response(self) -> None:
+        start = datetime(2026, 10, 14, tzinfo=timezone.utc)
+        with self.assertRaises(api.BkwInvalidResponse):
+            await api.fetch_consumption(
+                self.session, self.auth, start, start + timedelta(days=1), "BADJSON"
+            )
+
+    async def test_redirect_is_not_followed(self) -> None:
+        start = datetime(2026, 10, 14, tzinfo=timezone.utc)
+        with self.assertRaises(api.BkwCannotConnect) as caught:
+            await api.fetch_consumption(
+                self.session, self.auth, start, start + timedelta(days=1), "REDIRECT"
+            )
+        self.assertEqual(caught.exception.status, 302)
+
     async def test_reversed_bounds_are_rejected_locally(self) -> None:
         start = datetime(2026, 10, 14, tzinfo=timezone.utc)
         with self.assertRaises(api.BkwInvalidResponse):
@@ -96,6 +175,12 @@ class ApiContractTest(unittest.IsolatedAsyncioTestCase):
 
     async def test_unreachable_token_server_is_transient(self) -> None:
         with patch.object(const, "TOKEN_URL", "http://127.0.0.1:1/token"):
+            with self.assertRaises(auth.BkwAuthTransient):
+                await api.fetch_metering_points(self.session, self.auth)
+
+    async def test_unknown_status_is_transient_not_rejected(self) -> None:
+        # A 404 of the token endpoint must not look like a wrong password.
+        with patch.object(const, "TOKEN_URL", self.service.base + "/missing"):
             with self.assertRaises(auth.BkwAuthTransient):
                 await api.fetch_metering_points(self.session, self.auth)
 
