@@ -9,10 +9,16 @@ The module has no Home Assistant imports, so a plain test can use it.
 
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime, timezone
 from typing import Any
 
+import aiohttp
+
 from . import const
+
+# Transport failures. A bad answer is not one of these, so it stays visible.
+TRANSPORT_ERRORS = (aiohttp.ClientError, asyncio.TimeoutError, OSError)
 
 
 class BkwError(Exception):
@@ -43,6 +49,17 @@ def timestamp(value: datetime) -> str:
     return value.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
 
 
+def parse_timestamp(value: str) -> datetime:
+    """Parse an API timestamp. A missing UTC offset means UTC."""
+    stamp = value.strip()
+    if stamp.endswith(("Z", "z")):
+        stamp = stamp[:-1] + "+00:00"
+    parsed = datetime.fromisoformat(stamp)
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed
+
+
 async def _get_json(
     session: Any, path: str, params: dict[str, str], token: str
 ) -> Any:
@@ -53,15 +70,20 @@ async def _get_json(
             params=params,
             headers=headers,
             timeout=const.REQUEST_TIMEOUT,
+            # The bearer token must not go to the target of a redirect.
+            allow_redirects=False,
         ) as response:
             if response.status == 401:
                 raise BkwUnauthorized()
             if response.status != 200:
                 raise BkwCannotConnect(response.status)
-            return await response.json(content_type=None)
-    except BkwCannotConnect:
+            try:
+                return await response.json(content_type=None)
+            except ValueError as err:
+                raise BkwInvalidResponse("the API response body is not JSON") from err
+    except BkwError:
         raise
-    except Exception as err:  # noqa: BLE001 - any transport error is a connect error
+    except TRANSPORT_ERRORS as err:
         raise BkwCannotConnect(message=str(err)) from err
 
 
@@ -72,13 +94,13 @@ async def _request(
     token = await auth.token()
     try:
         return await _get_json(session, path, params, token)
-    except BkwUnauthorized:
+    except BkwUnauthorized as err:
         auth.invalidate()
         token = await auth.token()
         try:
             return await _get_json(session, path, params, token)
         except BkwUnauthorized:
-            raise BkwCannotConnect(401, "BKW API rejected the credentials") from None
+            raise BkwCannotConnect(401, "BKW API rejected the credentials") from err
 
 
 async def fetch_metering_points(session: Any, auth: Any) -> list[str]:
@@ -132,4 +154,11 @@ def latest_value(records: list[tuple[str, float]]) -> float | None:
     """Return the value of the newest record, or None when there is no data."""
     if not records:
         return None
-    return max(records, key=lambda record: record[0])[1]
+
+    def sort_key(record: tuple[str, float]) -> tuple[datetime, str]:
+        try:
+            return (parse_timestamp(record[0]), record[0])
+        except ValueError:
+            return (datetime.min.replace(tzinfo=timezone.utc), record[0])
+
+    return max(records, key=sort_key)[1]

@@ -1,0 +1,47 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "BKW Energy",
+        "description": "Inserire le credenziali del proprio account BKW.",
+        "data": {
+          "username": "Nome utente",
+          "password": "Password",
+          "metering_point": "Codice del punto di misura (facoltativo)"
+        }
+      },
+      "reauth_confirm": {
+        "title": "BKW Energy",
+        "description": "Le credenziali di {username} non sono più valide. Inserire di nuovo la password di questo account.",
+        "data": {
+          "password": "Password"
+        }
+      },
+      "reconfigure": {
+        "title": "BKW Energy",
+        "description": "Scegliere il codice del punto di misura di questo account.",
+        "data": {
+          "metering_point": "Codice del punto di misura"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "L'API BKW non è raggiungibile.",
+      "invalid_auth": "Nome utente o password non corretti.",
+      "metering_point_required": "L'account ha più punti di misura. Inserire un codice di punto di misura.",
+      "invalid_metering_point": "L'account non conosce questo codice di punto di misura."
+    },
+    "abort": {
+      "already_configured": "Questo account è già configurato.",
+      "no_metering_point": "L'account non ha punti di misura.",
+      "reauth_required": "Le credenziali salvate non sono più valide. Avviare prima la nuova autenticazione."
+    }
+  },
+  "entity": {
+    "sensor": {
+      "consumption": {
+        "name": "Consumo di ieri"
+      }
+    }
+  }
+}

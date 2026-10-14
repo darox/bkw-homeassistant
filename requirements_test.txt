@@ -1,0 +1,5 @@
+# Test dependencies. pytest-homeassistant-custom-component pins the
+# Home Assistant version that the tests run against.
+aiohttp
+pytest
+pytest-homeassistant-custom-component
