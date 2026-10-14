@@ -207,6 +207,11 @@ async def test_reauth_flow_stores_a_new_refresh_token(
     assert result["type"] == "abort"
     assert entry.data["refresh_token"] == REFRESH
     assert "password" not in entry.data
+    # The flow reloads the entry. Let the reload finish and unload the entry,
+    # so no polling timer stays behind at the end of the test.
+    await hass.async_block_till_done()
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    await hass.async_block_till_done()
 
 
 async def test_reconfigure_flow_changes_the_metering_point(
