@@ -32,6 +32,7 @@ custom_components/bkw/
   sensor.py         the sensor platform
   strings.json      English text for the config flow
   translations/en.json
+hacs.json           HACS metadata
 tests/
   fixture_server.py   a synthetic BKW API for the documented contract
   test_api.py         client tests against the synthetic API
@@ -40,15 +41,27 @@ tests/
 
 ## Install
 
-The repository is private. HACS cannot install a private repository. Copy the
-code into your Home Assistant configuration directory.
+HACS cannot read a private repository. The repository is private, so use method
+1. If you make the repository public, you can use method 2.
+
+### Method 1: copy the code (private repository)
 
 ```sh
-git clone https://github.com/darox/bkw-homeassistant.git /tmp/bkw
+gh repo clone darox/bkw-homeassistant /tmp/bkw    # or use SSH
 cp -r /tmp/bkw/custom_components/bkw <config>/custom_components/
 ```
 
-Then do these steps:
+For an update, run `git pull` in the clone and copy the directory again.
+
+### Method 2: HACS (public repository)
+
+1. Install HACS in your Home Assistant.
+2. In HACS, open the menu (the three dots) and select **Custom repositories**.
+3. Add the URL `https://github.com/darox/bkw-homeassistant`.
+4. Select the type **Integration**. Click **ADD**.
+5. Find **BKW Energy** in HACS and download it.
+
+### Then do these steps
 
 1. Restart Home Assistant.
 2. Go to **Settings -> Devices & services -> Add integration**.
@@ -56,8 +69,6 @@ Then do these steps:
 4. Enter the user name and the password of your BKW account.
 5. If the account has more than one metering point, enter one metering point
    code. If the account has one metering point, leave the field empty.
-
-For an update, run `git pull` in the clone and copy the directory again.
 
 ## Credentials
 
