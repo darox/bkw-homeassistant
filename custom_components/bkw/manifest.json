@@ -5,6 +5,7 @@
     "@darox"
   ],
   "config_flow": true,
+  "after_dependencies": ["recorder"],
   "documentation": "https://github.com/darox/bkw-homeassistant",
   "integration_type": "hub",
   "iot_class": "cloud_polling",
