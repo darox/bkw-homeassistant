@@ -27,6 +27,18 @@ OAuth refresh token in the config entry file. The file
 `.storage/core.config_entries` contains this token. Protect that file in the
 same way as `secrets.yaml`.
 
+The integration asks the BKW login server for an offline login. An offline
+refresh token has no short life. Thus a restart of Home Assistant and a long
+downtime of Home Assistant do not ask for the password again. The integration
+renews the login in the background, and each renewal holds the login session
+open. The login server rotates the token at each renewal, and the integration
+keeps the newest token.
+
+An account without the right for an offline login gets a plain login token
+instead. That token has a short life, about 30 minutes. The integration renews
+it in the background. If Home Assistant stays off longer than the life of the
+token, the integration asks for the password one time.
+
 ## Change the password
 
 When you change the password on the BKW portal, Home Assistant shows a repair

@@ -167,9 +167,15 @@ class BkwConfigFlow(ConfigFlow, domain=DOMAIN):
                 if requested not in codes:
                     errors["base"] = "invalid_metering_point"
                 else:
+                    data_updates = {CONF_METERING_POINT: requested}
+                    if auth.refresh_token:
+                        # The login server rotated the refresh token and the
+                        # entry must keep the new one, or the entry cannot log
+                        # in again.
+                        data_updates[CONF_REFRESH_TOKEN] = auth.refresh_token
                     return self.async_update_reload_and_abort(
                         entry,
-                        data_updates={CONF_METERING_POINT: requested},
+                        data_updates=data_updates,
                         options={CONF_QUARTER_HOUR: quarter_hour},
                     )
         return self.async_show_form(

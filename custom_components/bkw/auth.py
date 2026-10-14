@@ -4,8 +4,16 @@ The BKW web application uses an OAuth password grant against the Keycloak realm
 `oneportal`. This module sends that grant, renews the token with the refresh
 token, and falls back to the password grant when the refresh token is dead.
 
+The login asks for the scope `offline_access`. An offline refresh token has no
+short life, so a restart and a long downtime of Home Assistant do not ask for
+the password again.
+
 The session stores only a refresh token. The configuration entry keeps that
 refresh token, not the password.
+
+The BKW login server rotates the refresh token at each renewal and gives the
+old token no more value. The session reports each new refresh token to the
+caller, so the configuration entry always keeps the newest one.
 
 This module has no Home Assistant imports, so a plain test can use it.
 """
@@ -13,6 +21,8 @@ This module has no Home Assistant imports, so a plain test can use it.
 from __future__ import annotations
 
 import asyncio
+import logging
+from collections.abc import Callable
 from dataclasses import dataclass, replace
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -21,6 +31,8 @@ from . import const
 from .api import BkwError, TRANSPORT_ERRORS
 
 MAX_TOKEN_LENGTH = 16384
+
+_LOGGER = logging.getLogger(__name__)
 
 
 class BkwAuthError(BkwError):
@@ -108,14 +120,16 @@ def _tokens(body: dict[str, Any], require_refresh: bool) -> TokenSet:
     )
 
 
-async def password_grant(session: Any, username: str, password: str) -> TokenSet:
-    """Send the OAuth password grant and return a new token set."""
+async def _password_grant(
+    session: Any, username: str, password: str, scope: str
+) -> TokenSet:
+    """Send one OAuth password grant with the given scope."""
     body = await _post_token(
         session,
         {
             "grant_type": "password",
             "client_id": const.CLIENT_ID,
-            "scope": const.SCOPE,
+            "scope": scope,
             "username": username,
             "password": password,
         },
@@ -123,8 +137,38 @@ async def password_grant(session: Any, username: str, password: str) -> TokenSet
     return _tokens(body, require_refresh=True)
 
 
+async def password_grant(session: Any, username: str, password: str) -> TokenSet:
+    """Send the OAuth password grant and return a new token set.
+
+    The request asks for an offline login. An offline refresh token has no
+    short life, so a restart and a long downtime of Home Assistant do not ask
+    for the password again.
+
+    The login server refuses the offline scope for an account without the
+    `offline_access` role. That refusal is not a credential refusal, so ask
+    again with the plain scope.
+    """
+    try:
+        return await _password_grant(session, username, password, const.SCOPE)
+    except BkwAuthRejected as err:
+        if err.code == "invalid_grant":
+            # The login server refused the credentials. A second request
+            # cannot help.
+            raise
+        _LOGGER.debug(
+            "The login server refused the offline login (%s). "
+            "Use the plain scope.",
+            err,
+        )
+        return await _password_grant(session, username, password, const.SCOPE_PLAIN)
+
+
 async def refresh_grant(session: Any, refresh_token: str) -> TokenSet:
-    """Send the OAuth refresh grant and return a new token set."""
+    """Send the OAuth refresh grant and return a new token set.
+
+    A renewal does not repeat the offline scope. The login server reads the
+    scopes of the old token, so an offline token stays offline.
+    """
     body = await _post_token(
         session,
         {
@@ -145,11 +189,13 @@ class BkwSession:
         username: str,
         password: str | None = None,
         refresh_token: str | None = None,
+        on_refresh_token: Callable[[str], None] | None = None,
     ) -> None:
         self.http = session
         self._username = username
         self._password = password
         self._refresh_token = refresh_token
+        self._on_refresh_token = on_refresh_token
         self._tokens: TokenSet | None = None
         self._lock = asyncio.Lock()
 
@@ -160,17 +206,40 @@ class BkwSession:
             return self._tokens.refresh
         return self._refresh_token
 
-    async def token(self) -> str:
-        """Return a valid access token. Renew it if necessary."""
+    @property
+    def refresh_expires_at(self) -> datetime | None:
+        """The end of the life of the newest refresh token, or None."""
+        if self._tokens is None:
+            return None
+        return self._tokens.refresh_expires_at
+
+    async def token(self, force: bool = False) -> str:
+        """Return a valid access token. Renew it if necessary.
+
+        A forced call always asks the login server, also when the access
+        token is still valid. Use it to keep the login alive.
+        """
         # One lock for the whole session: two platforms must not start two
         # grants at the same time.
         async with self._lock:
-            return await self._valid_token()
+            return await self._valid_token(force)
 
-    async def _valid_token(self) -> str:
+    def _accept_tokens(self, tokens: TokenSet) -> str:
+        """Keep a token set and report a new refresh token to the caller."""
+        self._tokens = tokens
+        if tokens.refresh and tokens.refresh != self._refresh_token:
+            # The server rotated the refresh token. The old token has no more
+            # value, so the caller must store the new one. Without this step,
+            # the next start of Home Assistant asks for the password again.
+            self._refresh_token = tokens.refresh
+            if self._on_refresh_token is not None:
+                self._on_refresh_token(tokens.refresh)
+        return tokens.access
+
+    async def _valid_token(self, force: bool = False) -> str:
         now = _now()
         tokens = self._tokens
-        if tokens and now + const.REFRESH_SKEW < tokens.expires_at:
+        if not force and tokens and now + const.REFRESH_SKEW < tokens.expires_at:
             return tokens.access
 
         refresh = (tokens.refresh if tokens else "") or self._refresh_token or ""
@@ -192,12 +261,11 @@ class BkwSession:
                         refresh=refresh,
                         refresh_expires_at=refresh_expires_at,
                     )
-                self._tokens = renewed
-                return renewed.access
+                return self._accept_tokens(renewed)
         if self._password is None:
             raise BkwAuthRejected("refresh_token_expired", 401)
-        self._tokens = await password_grant(self.http, self._username, self._password)
-        return self._tokens.access
+        granted = await password_grant(self.http, self._username, self._password)
+        return self._accept_tokens(granted)
 
     def invalidate(self) -> None:
         """Forget the access token so the next call renews it."""
