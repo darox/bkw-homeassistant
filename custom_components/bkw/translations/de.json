@@ -22,7 +22,7 @@
         "description": "Wählen Sie den Messpunkt-Code dieses Kontos.",
         "data": {
           "metering_point": "Messpunkt-Code",
-          "quarter_hour": "Einen Sensor für die Energie der letzten 15 Minuten hinzufügen"
+          "quarter_hour": "Den letzten vollstaendigen Tag ins Energie-Dashboard uebernehmen und einen 15-Minuten-Sensor hinzufuegen"
         }
       }
     },

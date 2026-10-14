@@ -41,6 +41,13 @@ DEFAULT_RESOLUTION = "P1D"
 QUARTER_HOUR_RESOLUTION = "PT15M"
 QUARTER_HOUR = timedelta(minutes=15)
 
+# The BKW meter data of a day arrives about one day late. The integration
+# writes the 15 minute records into the statistics of Home Assistant, so the
+# Energy dashboard shows that day as if it were yesterday. Each poll reads a
+# window of some days again, so a correction of the meter data and a downtime
+# of Home Assistant do not lose data.
+STATISTICS_WINDOW = timedelta(days=3)
+
 # The BKW meter data changes one time each day. A poll every 6 hours gives the
 # same values as an hourly poll, with less load on the server.
 SCAN_INTERVAL = timedelta(hours=6)

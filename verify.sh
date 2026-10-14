@@ -24,4 +24,4 @@ if manifest["domain"] != root.name:
 print("static checks ok")
 PYCHECK
 "$PY" -m unittest tests.test_api -v
-"$PY" -m pytest tests/test_integration.py -q
+"$PY" -m pytest tests/test_integration.py tests/test_statistics.py -q

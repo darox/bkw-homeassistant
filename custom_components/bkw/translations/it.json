@@ -22,7 +22,7 @@
         "description": "Scegliere il codice del punto di misura di questo account.",
         "data": {
           "metering_point": "Codice del punto di misura",
-          "quarter_hour": "Aggiungere un sensore per l'energia degli ultimi 15 minuti"
+          "quarter_hour": "Importare l'ultimo giorno completo nel pannello Energia e aggiungere un sensore di 15 minuti"
         }
       }
     },

@@ -17,7 +17,7 @@ from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.util import dt as dt_util
 
-from . import api
+from . import api, statistics
 from .auth import BkwAuthRejected, BkwError
 from .const import (  # noqa: F401
     CONF_QUARTER_HOUR,
@@ -26,6 +26,7 @@ from .const import (  # noqa: F401
     QUARTER_HOUR,
     QUARTER_HOUR_RESOLUTION,
     SCAN_INTERVAL,
+    STATISTICS_WINDOW,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -124,15 +125,24 @@ class BkwQuarterHourSensor(BkwSensor):
         self._attr_unique_id = f"{self._unique}_{data.code}_15min"
 
     async def async_update(self) -> None:
-        """Read the newest 15 minute interval and set the state."""
+        """Read the newest 15 minute interval and set the state.
+
+        The same records go into the statistics of Home Assistant, so the
+        Energy dashboard shows the last complete day. A poll reads a window of
+        some days again, so a correction of the meter data and a downtime of
+        Home Assistant do not lose data.
+        """
         today = dt_util.start_of_local_day()
-        start = dt_util.start_of_local_day(today - timedelta(days=1))
+        start = dt_util.start_of_local_day(today - STATISTICS_WINDOW)
         records = await self._async_fetch(
             start, dt_util.utcnow(), QUARTER_HOUR_RESOLUTION
         )
         if records is None:
             self._attr_native_value = None
             return
+        await statistics.async_import(
+            self.hass, self._data.code, f"{self._entry.title} consumption", records
+        )
         record = api.latest_record(records)
         if record is None:
             self._attr_native_value = None
