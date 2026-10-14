@@ -1,11 +1,9 @@
 # BKW Energy: a minimal Home Assistant integration
 
 This directory holds a small Home Assistant integration for the BKW energy API
-at `https://api-energy-monitoring.bkw.ch`. The integration speaks to the BKW
-API directly. The Go project
-[bkw-backend](https://github.com/darox/bkw-backend) gives the API contract.
-That project is not released, so this integration holds all the logic. The
-integration does not use MCP. The integration does not use Prometheus.
+at `https://api-energy-monitoring.bkw.ch`. The integration speaks to that API
+directly and holds all of the client logic. It does not use MCP. It does not
+use Prometheus.
 
 ## What the integration does
 
@@ -34,7 +32,7 @@ custom_components/bkw/
   translations/en.json
 hacs.json           HACS metadata
 tests/
-  fixture_server.py   a synthetic BKW API for the documented contract
+  fixture_server.py   a synthetic BKW API for the API contract
   test_api.py         client tests against the synthetic API
   test_integration.py integration tests inside a real Home Assistant
 ```

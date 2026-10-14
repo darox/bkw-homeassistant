@@ -1,4 +1,4 @@
-"""A synthetic BKW API that follows the contract of the backend.
+"""A synthetic BKW API that follows the same contract as the real API.
 
 The fixture serves the OAuth token endpoint and the two data endpoints:
 
