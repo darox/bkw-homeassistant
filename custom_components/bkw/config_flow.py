@@ -9,6 +9,7 @@ import voluptuous as vol
 from homeassistant.config_entries import ConfigFlow, ConfigFlowResult
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.selector import (
+    BooleanSelector,
     TextSelector,
     TextSelectorConfig,
     TextSelectorType,
@@ -19,6 +20,7 @@ from .auth import BkwAuthRejected, BkwAuthTransient, BkwSession
 from .const import (
     CONF_METERING_POINT,
     CONF_PASSWORD,
+    CONF_QUARTER_HOUR,
     CONF_REFRESH_TOKEN,
     CONF_USERNAME,
     DOMAIN,
@@ -40,7 +42,12 @@ STEP_REAUTH_SCHEMA = vol.Schema(
     }
 )
 
-STEP_RECONFIGURE_SCHEMA = vol.Schema({vol.Required(CONF_METERING_POINT): str})
+STEP_RECONFIGURE_SCHEMA = vol.Schema(
+    {
+        vol.Required(CONF_METERING_POINT): str,
+        vol.Optional(CONF_QUARTER_HOUR, default=False): BooleanSelector(),
+    }
+)
 
 
 class BkwConfigFlow(ConfigFlow, domain=DOMAIN):
@@ -137,11 +144,12 @@ class BkwConfigFlow(ConfigFlow, domain=DOMAIN):
     async def async_step_reconfigure(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Change the metering point code of an existing entry."""
+        """Change the metering point code and the extra data of an entry."""
         errors: dict[str, str] = {}
         entry = self._get_reconfigure_entry()
         if user_input is not None:
             requested = user_input[CONF_METERING_POINT].strip()
+            quarter_hour = bool(user_input.get(CONF_QUARTER_HOUR, False))
             session = async_get_clientsession(self.hass)
             auth = BkwSession(
                 session,
@@ -162,12 +170,16 @@ class BkwConfigFlow(ConfigFlow, domain=DOMAIN):
                     return self.async_update_reload_and_abort(
                         entry,
                         data_updates={CONF_METERING_POINT: requested},
+                        options={CONF_QUARTER_HOUR: quarter_hour},
                     )
         return self.async_show_form(
             step_id="reconfigure",
             data_schema=self.add_suggested_values_to_schema(
                 STEP_RECONFIGURE_SCHEMA,
-                {CONF_METERING_POINT: entry.data.get(CONF_METERING_POINT, "")},
+                {
+                    CONF_METERING_POINT: entry.data.get(CONF_METERING_POINT, ""),
+                    CONF_QUARTER_HOUR: entry.options.get(CONF_QUARTER_HOUR, False),
+                },
             ),
             errors=errors,
         )

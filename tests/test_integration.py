@@ -269,3 +269,39 @@ async def test_sensor_state_is_unknown_without_records(
     states = list(hass.states.async_all("sensor"))
     assert len(states) == 1
     assert states[0].state == "unknown"
+
+
+async def test_reconfigure_flow_adds_the_quarter_hour_sensor(
+    hass: HomeAssistant, api
+) -> None:
+    entry = _entry()
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    assert len(hass.states.async_all("sensor")) == 1
+
+    result = await entry.start_reconfigure_flow(hass)
+    assert result["type"] == "form"
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"metering_point": "CH0001", "quarter_hour": True}
+    )
+    await hass.async_block_till_done()
+    assert result["type"] == "abort"
+    assert entry.options == {"quarter_hour": True}
+
+    registry = er.async_get(hass)
+    states = list(hass.states.async_all("sensor"))
+    assert len(states) == 2
+    by_unique_id = {
+        registry.async_get(state.entity_id).unique_id: state for state in states
+    }
+    assert set(by_unique_id) == {f"{USERNAME}_CH0001", f"{USERNAME}_CH0001_15min"}
+    assert by_unique_id[f"{USERNAME}_CH0001"].state == "2.5"
+    quarter = by_unique_id[f"{USERNAME}_CH0001_15min"]
+    assert quarter.state == "1.0"
+    assert quarter.attributes["last_reset"]
+
+    # The reconfigure flow reloads the entry. Let the reload finish and unload
+    # the entry, so no polling timer stays behind at the end of the test.
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    await hass.async_block_till_done()

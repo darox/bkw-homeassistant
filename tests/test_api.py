@@ -55,6 +55,19 @@ class ApiContractTest(unittest.IsolatedAsyncioTestCase):
     async def test_empty_result_is_none_not_zero(self) -> None:
         self.assertIsNone(api.latest_value([]))
 
+    async def test_quarter_hour_returns_one_record_each_interval(self) -> None:
+        start = datetime(2026, 10, 14, tzinfo=timezone.utc)
+        records = await api.fetch_consumption(
+            self.session,
+            self.auth,
+            start,
+            start + timedelta(hours=1),
+            "CH0001",
+            "PT15M",
+        )
+        self.assertEqual(len(records), 3)
+        self.assertEqual(api.latest_value(records), 1.0)
+
     async def test_latest_value_compares_real_timestamps(self) -> None:
         # Text order would pick the second record, but its real time is earlier.
         records = [
@@ -62,6 +75,14 @@ class ApiContractTest(unittest.IsolatedAsyncioTestCase):
             ("2026-10-14T00:30:00.000+02:00", 2.0),
         ]
         self.assertEqual(api.latest_value(records), 1.0)
+
+    async def test_latest_record_returns_the_newest_pair(self) -> None:
+        records = [
+            ("2026-10-13T23:00:00.000Z", 1.0),
+            ("2026-10-14T00:30:00.000+02:00", 2.0),
+        ]
+        self.assertEqual(api.latest_record(records), records[0])
+        self.assertIsNone(api.latest_record([]))
 
     async def test_wrong_password_raises_auth_rejected(self) -> None:
         bad = auth.BkwSession(self.session, fixture_server.USERNAME, "wrong")

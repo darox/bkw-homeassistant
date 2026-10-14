@@ -39,6 +39,20 @@ keeps a new refresh token.
 2. Open the BKW Energy entry.
 3. Select **Reconfigure** and enter the metering point code.
 
+## 15 minute data
+
+You can add a second sensor for the energy of the last 15 minutes.
+
+1. Go to **Settings -> Devices & services**.
+2. Open the BKW Energy entry.
+3. Select **Reconfigure**.
+4. Enable **Add a sensor for the energy of the last 15 minutes**.
+5. Select **Submit**.
+
+The sensor gives the energy of the newest 15 minute interval. BKW sends
+this data with a delay. Thus the sensor can show an interval of the last
+complete day.
+
 ## License
 
 MIT. Refer to the file LICENSE.

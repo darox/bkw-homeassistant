@@ -12,7 +12,7 @@ Tests point ``const.TOKEN_URL`` and ``const.API_BASE`` at the returned URL.
 from __future__ import annotations
 
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from aiohttp import web
 from aiohttp.test_utils import TestServer
@@ -22,6 +22,18 @@ PASSWORD = "secret"
 REFRESH_TOKEN = "refresh-1"
 METERING_POINTS = [{"meteringPointCode": "CH0001", "description": "Home"}]
 RESOLUTIONS = {"PT15M", "P1D", "P1M", "P1Y"}
+
+
+def quarter_hour_records(start: datetime, stop: datetime) -> list[dict[str, object]]:
+    """Return 15 minute records. The newest record carries a distinct value."""
+    records: list[dict[str, object]] = []
+    moment = start + timedelta(minutes=15)
+    while moment < stop:
+        records.append({"t": moment.isoformat(), "v": 0.5})
+        moment += timedelta(minutes=15)
+    if records:
+        records[-1] = {"t": records[-1]["t"], "v": 1.0}
+    return records
 
 
 class FixtureService:
@@ -134,6 +146,8 @@ class FixtureService:
             return web.Response(status=302, headers={"Location": self.base + "/login"})
         if point != "CH0001":
             return web.json_response({"error": "not found"}, status=404)
+        if resolution == "PT15M":
+            return web.json_response(quarter_hour_records(start, stop))
         return web.json_response(
             [
                 {"t": start.isoformat(), "v": 1.25},
