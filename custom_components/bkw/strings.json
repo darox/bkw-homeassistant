@@ -1,0 +1,31 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "BKW Energy",
+        "description": "Enter the login of your BKW account.",
+        "data": {
+          "username": "User name",
+          "password": "Password",
+          "metering_point": "Metering point code (optional)"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Cannot reach the BKW API.",
+      "invalid_auth": "The user name or the password is wrong.",
+      "metering_point_required": "The account has more than one metering point. Enter one metering point code.",
+      "invalid_metering_point": "The account does not know this metering point code."
+    },
+    "abort": {
+      "already_configured": "This account is already configured."
+    }
+  },
+  "entity": {
+    "sensor": {
+      "consumption": {
+        "name": "Consumption today"
+      }
+    }
+  }
+}

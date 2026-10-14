@@ -1,0 +1,14 @@
+{
+  "domain": "bkw",
+  "name": "BKW Energy",
+  "codeowners": [
+    "@darox"
+  ],
+  "config_flow": true,
+  "documentation": "https://github.com/darox/bkw-homeassistant",
+  "integration_type": "hub",
+  "iot_class": "cloud_polling",
+  "requirements": [],
+  "version": "0.2.0",
+  "issue_tracker": "https://github.com/darox/bkw-homeassistant/issues"
+}

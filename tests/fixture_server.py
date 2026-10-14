@@ -1,0 +1,131 @@
+"""A synthetic BKW API that follows the contract of the backend.
+
+The fixture serves the OAuth token endpoint and the two data endpoints:
+
+* ``POST /token``
+* ``GET /api/meteringpoint``
+* ``GET /api/metering-data``
+
+Tests point ``const.TOKEN_URL`` and ``const.API_BASE`` at the returned URL.
+"""
+
+from __future__ import annotations
+
+from datetime import datetime
+
+from aiohttp import web
+from aiohttp.test_utils import TestServer
+
+USERNAME = "owner@example.com"
+PASSWORD = "secret"
+METERING_POINTS = [{"meteringPointCode": "CH0001", "description": "Home"}]
+RESOLUTIONS = {"PT15M", "P1D", "P1M", "P1Y"}
+
+
+class FixtureService:
+    """A loopback stand-in for the BKW API."""
+
+    def __init__(self) -> None:
+        self._server: TestServer | None = None
+        self.base = ""
+        self.issued = 0
+        self.live: set[str] = set()
+        self.reject_next_access = False
+
+    async def start(self) -> str:
+        """Bind the fixture and return its base URL."""
+        app = web.Application()
+        app.router.add_post("/token", self._token)
+        app.router.add_get("/api/meteringpoint", self._metering_points)
+        app.router.add_get("/api/metering-data", self._metering_data)
+        self._server = TestServer(app, host="127.0.0.1")
+        await self._server.start_server()
+        self.base = f"http://{self._server.host}:{self._server.port}"
+        return self.base
+
+    async def stop(self) -> None:
+        """Release the port."""
+        if self._server is not None:
+            await self._server.close()
+            self._server = None
+
+    def _issue(self) -> str:
+        self.issued += 1
+        token = f"access-{self.issued}"
+        self.live.add(token)
+        return token
+
+    async def _token(self, request: web.Request) -> web.Response:
+        form = await request.post()
+        grant = form.get("grant_type")
+        if grant == "password":
+            if form.get("client_id") != "mybkw-webapp":
+                return web.json_response({"error": "invalid_client"}, status=401)
+            if form.get("username") != USERNAME or form.get("password") != PASSWORD:
+                return web.json_response({"error": "invalid_grant"}, status=400)
+            return web.json_response(
+                {
+                    "access_token": self._issue(),
+                    "expires_in": 300,
+                    "refresh_token": "refresh-1",
+                    "refresh_expires_in": 1800,
+                }
+            )
+        if grant == "refresh_token":
+            if form.get("refresh_token") != "refresh-1":
+                return web.json_response({"error": "invalid_grant"}, status=400)
+            return web.json_response(
+                {
+                    "access_token": self._issue(),
+                    "expires_in": 300,
+                    "refresh_token": "refresh-1",
+                    "refresh_expires_in": 1800,
+                }
+            )
+        return web.json_response({"error": "unsupported_grant_type"}, status=400)
+
+    def _authorized(self, request: web.Request) -> web.Response | None:
+        header = request.headers.get("Authorization", "")
+        if not header.startswith("Bearer "):
+            return web.json_response({"error": "unauthorized"}, status=401)
+        token = header[len("Bearer ") :]
+        if token not in self.live:
+            return web.json_response({"error": "unauthorized"}, status=401)
+        if self.reject_next_access:
+            self.reject_next_access = False
+            self.live.discard(token)
+            return web.json_response({"error": "unauthorized"}, status=401)
+        return None
+
+    async def _metering_points(self, request: web.Request) -> web.Response:
+        denied = self._authorized(request)
+        if denied is not None:
+            return denied
+        return web.json_response(METERING_POINTS)
+
+    async def _metering_data(self, request: web.Request) -> web.Response:
+        denied = self._authorized(request)
+        if denied is not None:
+            return denied
+        query = request.query
+        try:
+            start = datetime.fromisoformat(query["measurementValidityStart"])
+            stop = datetime.fromisoformat(query["measurementValidityStop"])
+            resolution = query["resolution"]
+            point = query["meteringPointCode"]
+        except (KeyError, ValueError):
+            return web.json_response({"error": "invalid input"}, status=400)
+        if query.get("dataType") != "PRODUCTION_BKW":
+            return web.json_response({"error": "invalid input"}, status=400)
+        if resolution not in RESOLUTIONS or not start < stop:
+            return web.json_response({"error": "invalid input"}, status=400)
+        if point == "BOOM":
+            return web.json_response({"error": "upstream failure"}, status=502)
+        if point != "CH0001":
+            return web.json_response({"error": "not found"}, status=404)
+        return web.json_response(
+            [
+                {"t": start.isoformat(), "v": 1.25},
+                {"t": stop.isoformat(), "v": 2.5},
+            ]
+        )
