@@ -4,6 +4,8 @@ A small Home Assistant integration for the BKW energy API. It makes one energy
 sensor for the metering point that you select. The sensor shows the energy of
 the last complete day in kWh. BKW sends this data about one day late.
 
+Add this sensor to the Energy dashboard as an energy source.
+
 ## Requirements
 
 - Home Assistant version 2024.11.0 or later.
@@ -45,23 +47,6 @@ message. Select the message and enter the new password.
 1. Go to **Settings -> Devices & services**.
 2. Open the BKW Energy entry.
 3. Select **Reconfigure** and enter the metering point code.
-
-## 15 minute data
-
-1. Open the BKW Energy entry and select **Reconfigure**.
-2. Enable **Import the last complete day into the Energy dashboard and add a
-   15 minute sensor**.
-3. Select **Submit**.
-4. Add the new energy source to the Energy dashboard.
-
-BKW sends this data about one day late. The integration reads the 15 minute
-records again at each poll and writes them into the Home Assistant statistics.
-A poll reads several days again. Thus corrections and downtime do not lose
-data.
-
-The Energy dashboard shows hour values, not 15 minute values. The option also
-adds a sensor with the newest 15 minute interval. Use that sensor for an
-automation. Do not add it to the Energy dashboard.
 
 ## License
 

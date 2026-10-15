@@ -21,8 +21,7 @@
         "title": "BKW Energy",
         "description": "Sélectionnez le code du point de mesure de ce compte.",
         "data": {
-          "metering_point": "Code du point de mesure",
-          "quarter_hour": "Importer le dernier jour complet dans le tableau de bord Energie et ajouter un capteur de 15 minutes"
+          "metering_point": "Code du point de mesure"
         }
       }
     },
@@ -42,9 +41,6 @@
     "sensor": {
       "consumption": {
         "name": "Consommation hier"
-      },
-      "consumption_quarter": {
-        "name": "Consommation (15 minutes)"
       }
     }
   }

@@ -21,8 +21,7 @@
         "title": "BKW Energy",
         "description": "Wählen Sie den Messpunkt-Code dieses Kontos.",
         "data": {
-          "metering_point": "Messpunkt-Code",
-          "quarter_hour": "Den letzten vollstaendigen Tag ins Energie-Dashboard uebernehmen und einen 15-Minuten-Sensor hinzufuegen"
+          "metering_point": "Messpunkt-Code"
         }
       }
     },
@@ -42,9 +41,6 @@
     "sensor": {
       "consumption": {
         "name": "Verbrauch gestern"
-      },
-      "consumption_quarter": {
-        "name": "Verbrauch (15 Minuten)"
       }
     }
   }
