@@ -21,8 +21,7 @@
         "title": "BKW Energy",
         "description": "Select the metering point code of this account.",
         "data": {
-          "metering_point": "Metering point code",
-          "quarter_hour": "Import the last complete day into the Energy dashboard and add a 15 minute sensor"
+          "metering_point": "Metering point code"
         }
       }
     },
@@ -42,9 +41,6 @@
     "sensor": {
       "consumption": {
         "name": "Consumption yesterday"
-      },
-      "consumption_quarter": {
-        "name": "Consumption (15 minutes)"
       }
     }
   }

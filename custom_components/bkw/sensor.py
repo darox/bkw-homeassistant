@@ -17,16 +17,12 @@ from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.util import dt as dt_util
 
-from . import api, statistics
+from . import api
 from .auth import BkwAuthRejected, BkwError
 from .const import (  # noqa: F401
-    CONF_QUARTER_HOUR,
     DEFAULT_RESOLUTION,
     DOMAIN,
-    QUARTER_HOUR,
-    QUARTER_HOUR_RESOLUTION,
     SCAN_INTERVAL,
-    STATISTICS_WINDOW,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -39,10 +35,7 @@ async def async_setup_entry(
 ) -> None:
     """Create the sensors of the metering point of this entry."""
     data = entry.runtime_data
-    entities: list[SensorEntity] = [BkwConsumptionSensor(entry, data)]
-    if entry.options.get(CONF_QUARTER_HOUR):
-        entities.append(BkwQuarterHourSensor(entry, data))
-    async_add_entities(entities, True)
+    async_add_entities([BkwConsumptionSensor(entry, data)], True)
 
 
 class BkwSensor(SensorEntity):
@@ -113,42 +106,3 @@ class BkwConsumptionSensor(BkwSensor):
             return
         self._attr_native_value = api.latest_value(records)
         self._attr_last_reset = start
-
-
-class BkwQuarterHourSensor(BkwSensor):
-    """Energy of the newest BKW 15 minute interval, in kWh."""
-
-    _attr_translation_key = "consumption_quarter"
-
-    def __init__(self, entry: ConfigEntry, data) -> None:
-        super().__init__(entry, data)
-        self._attr_unique_id = f"{self._unique}_{data.code}_15min"
-
-    async def async_update(self) -> None:
-        """Read the newest 15 minute interval and set the state.
-
-        The same records go into the statistics of Home Assistant, so the
-        Energy dashboard shows the last complete day. A poll reads a window of
-        some days again, so a correction of the meter data and a downtime of
-        Home Assistant do not lose data.
-        """
-        today = dt_util.start_of_local_day()
-        start = dt_util.start_of_local_day(today - STATISTICS_WINDOW)
-        records = await self._async_fetch(
-            start, dt_util.utcnow(), QUARTER_HOUR_RESOLUTION
-        )
-        if records is None:
-            self._attr_native_value = None
-            return
-        await statistics.async_import(
-            self.hass, self._data.code, f"{self._entry.title} consumption", records
-        )
-        record = api.latest_record(records)
-        if record is None:
-            self._attr_native_value = None
-            return
-        self._attr_native_value = record[1]
-        # The timestamp of a record is the end of its interval. The total of
-        # this sensor restarts at the start of the interval, so Home Assistant
-        # counts each interval one time in the long-term statistics.
-        self._attr_last_reset = api.parse_timestamp(record[0]) - QUARTER_HOUR

@@ -14,7 +14,6 @@ CONF_USERNAME = "username"
 CONF_PASSWORD = "password"
 CONF_REFRESH_TOKEN = "refresh_token"
 CONF_METERING_POINT = "metering_point"
-CONF_QUARTER_HOUR = "quarter_hour"
 
 TOKEN_URL = (
     "https://login.portal-services.ch/auth/realms/oneportal"
@@ -33,20 +32,8 @@ METERING_POINTS_PATH = "/api/meteringpoint"
 METERING_DATA_PATH = "/api/metering-data"
 DATA_TYPE = "PRODUCTION_BKW"
 
-RESOLUTIONS = ("PT15M", "P1D", "P1M", "P1Y")
+RESOLUTIONS = ("P1D", "P1M", "P1Y")
 DEFAULT_RESOLUTION = "P1D"
-
-# The finest resolution of the BKW meter data. The extra sensor reads the
-# energy of the newest 15 minute interval with this resolution.
-QUARTER_HOUR_RESOLUTION = "PT15M"
-QUARTER_HOUR = timedelta(minutes=15)
-
-# The BKW meter data of a day arrives about one day late. The integration
-# writes the 15 minute records into the statistics of Home Assistant, so the
-# Energy dashboard shows that day as if it were yesterday. Each poll reads a
-# window of some days again, so a correction of the meter data and a downtime
-# of Home Assistant do not lose data.
-STATISTICS_WINDOW = timedelta(days=3)
 
 # The BKW meter data changes one time each day. A poll every 6 hours gives the
 # same values as an hourly poll, with less load on the server.

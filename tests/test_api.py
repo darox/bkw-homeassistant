@@ -55,19 +55,6 @@ class ApiContractTest(unittest.IsolatedAsyncioTestCase):
     async def test_empty_result_is_none_not_zero(self) -> None:
         self.assertIsNone(api.latest_value([]))
 
-    async def test_quarter_hour_returns_one_record_each_interval(self) -> None:
-        start = datetime(2026, 10, 14, tzinfo=timezone.utc)
-        records = await api.fetch_consumption(
-            self.session,
-            self.auth,
-            start,
-            start + timedelta(hours=1),
-            "CH0001",
-            "PT15M",
-        )
-        self.assertEqual(len(records), 3)
-        self.assertEqual(api.latest_value(records), 1.0)
-
     async def test_latest_value_compares_real_timestamps(self) -> None:
         # Text order would pick the second record, but its real time is earlier.
         records = [
@@ -192,7 +179,6 @@ class ApiContractTest(unittest.IsolatedAsyncioTestCase):
                             start,
                             start + timedelta(hours=1),
                             "CH0001",
-                            "PT15M",
                         )
 
     async def test_redirect_is_not_followed(self) -> None:

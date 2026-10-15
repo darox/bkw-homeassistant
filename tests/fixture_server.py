@@ -37,19 +37,7 @@ REFRESH_IDLE = 1800.0
 # The idle life of an offline refresh token. The real default is 30 days.
 OFFLINE_IDLE = 30 * 24 * 3600.0
 METERING_POINTS = [{"meteringPointCode": "CH0001", "description": "Home"}]
-RESOLUTIONS = {"PT15M", "P1D", "P1M", "P1Y"}
-
-
-def quarter_hour_records(start: datetime, stop: datetime) -> list[dict[str, object]]:
-    """Return 15 minute records. The newest record carries a distinct value."""
-    records: list[dict[str, object]] = []
-    moment = start + timedelta(minutes=15)
-    while moment < stop:
-        records.append({"t": moment.isoformat(), "v": 0.5})
-        moment += timedelta(minutes=15)
-    if records:
-        records[-1] = {"t": records[-1]["t"], "v": 1.0}
-    return records
+RESOLUTIONS = {"P1D", "P1M", "P1Y"}
 
 
 class FixtureService:
@@ -216,8 +204,6 @@ class FixtureService:
             return web.Response(status=302, headers={"Location": self.base + "/login"})
         if point != "CH0001":
             return web.json_response({"error": "not found"}, status=404)
-        if resolution == "PT15M":
-            return web.json_response(quarter_hour_records(start, stop))
         return web.json_response(
             [
                 {"t": start.isoformat(), "v": 1.25},
