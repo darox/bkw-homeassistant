@@ -4,7 +4,14 @@ A small Home Assistant integration for the BKW energy API. It makes one energy
 sensor for the metering point that you select. The sensor shows the energy of
 the last complete day in kWh. BKW sends this data about one day late.
 
-Add this sensor to the Energy dashboard as an energy source.
+## Energy dashboard
+
+The integration writes each complete day into the statistics of Home Assistant
+with the timestamp of that day. Add the statistic `<name> consumption` (id
+`bkw:<metering point code>`) as the grid consumption of the Energy dashboard.
+
+The sensor changes its state when the BKW data of the completed day arrives.
+That is about one day after the day of the data.
 
 ## Requirements
 

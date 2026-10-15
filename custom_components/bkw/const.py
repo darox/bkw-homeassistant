@@ -35,6 +35,16 @@ DATA_TYPE = "PRODUCTION_BKW"
 RESOLUTIONS = ("P1D", "P1M", "P1Y")
 DEFAULT_RESOLUTION = "P1D"
 
+# The meter data of a complete day. The integration writes the records into
+# the statistics of Home Assistant with the timestamp of that day, so the
+# Energy dashboard shows each day at the day it belongs to.
+DAY = timedelta(days=1)
+
+# The BKW meter data of a day arrives about one day late. Each poll reads a
+# window of some days again, so a correction of the meter data and a downtime
+# of Home Assistant do not lose data.
+STATISTICS_WINDOW = timedelta(days=3)
+
 # The BKW meter data changes one time each day. A poll every 6 hours gives the
 # same values as an hourly poll, with less load on the server.
 SCAN_INTERVAL = timedelta(hours=6)
