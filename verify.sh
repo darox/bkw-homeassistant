@@ -28,4 +28,4 @@ if order[:2] != ["domain", "name"] or order[2:] != sorted(order[2:]):
 print("static checks ok")
 PYCHECK
 "$PY" -m unittest tests.test_api -v
-"$PY" -m pytest tests/test_integration.py -q
+"$PY" -m pytest tests/test_integration.py tests/test_statistics.py -q

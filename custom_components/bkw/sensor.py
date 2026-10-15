@@ -17,12 +17,13 @@ from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.util import dt as dt_util
 
-from . import api
+from . import api, statistics
 from .auth import BkwAuthRejected, BkwError
 from .const import (  # noqa: F401
     DEFAULT_RESOLUTION,
     DOMAIN,
     SCAN_INTERVAL,
+    STATISTICS_WINDOW,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -97,12 +98,21 @@ class BkwConsumptionSensor(BkwSensor):
         self._attr_unique_id = f"{self._unique}_{data.code}"
 
     async def async_update(self) -> None:
-        """Read the energy of the last complete day and set the state."""
+        """Read the energy of the last complete day and set the state.
+
+        The same records go into the statistics of Home Assistant, so the
+        Energy dashboard shows each day at the day it belongs to. A poll reads
+        a window of some days again, so a correction of the meter data and a
+        downtime of Home Assistant do not lose data.
+        """
         today = dt_util.start_of_local_day()
-        start = dt_util.start_of_local_day(today - timedelta(days=1))
+        start = dt_util.start_of_local_day(today - STATISTICS_WINDOW)
         records = await self._async_fetch(start, today, DEFAULT_RESOLUTION)
         if records is None:
             self._attr_native_value = None
             return
         self._attr_native_value = api.latest_value(records)
-        self._attr_last_reset = start
+        self._attr_last_reset = dt_util.start_of_local_day(today - timedelta(days=1))
+        await statistics.async_import(
+            self.hass, self._data.code, f"{self._entry.title} consumption", records
+        )

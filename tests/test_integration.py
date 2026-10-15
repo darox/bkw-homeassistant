@@ -373,7 +373,7 @@ async def test_sensor_reads_the_last_complete_day(hass: HomeAssistant, api) -> N
         await hass.async_block_till_done()
     _session, _auth, start, stop, code, _resolution = mock.await_args.args
     assert stop == dt_util.start_of_local_day()
-    assert start == dt_util.start_of_local_day(stop - timedelta(days=1))
+    assert start == dt_util.start_of_local_day(stop - const.STATISTICS_WINDOW)
     assert code == "CH0001"
     states = list(hass.states.async_all("sensor"))
     assert len(states) == 1
